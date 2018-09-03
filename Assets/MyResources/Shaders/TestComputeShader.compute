@@ -1,0 +1,28 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMainA
+#pragma kernel CSMainB
+
+RWStructuredBuffer<int> int_buffer;
+int int_value;
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+// RWTexture2D<float4> Result;
+
+[numthreads(2, 2, 1)]
+void CSMainA(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+	// TODO: insert actual code here!
+    int_buffer[dispatch_thread_id.y * 2 + dispatch_thread_id.x] = dispatch_thread_id.y;
+
+	//Result[id.xy] = float4(id.x & id.y, (id.x & 15)/15.0, (id.y & 15)/15.0, 0.0);
+}
+
+[numthreads(2, 2, 1)]
+void CSMainB(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+    // TODO: insert actual code here!
+    int_buffer[dispatch_thread_id.y * 2 + dispatch_thread_id.x] = dispatch_thread_id.y;
+
+    //Result[id.xy] = float4(id.x & id.y, (id.x & 15) / 15.0, (id.y & 15) / 15.0, 0.0);
+}

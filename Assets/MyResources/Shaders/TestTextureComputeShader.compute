@@ -1,0 +1,28 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float4> texture_buffer;
+
+[numthreads(8,8,1)]
+// SV_DispathThreadID は、SV_Group_ID * numthreads + SV_GroupThreadID で算出される値です
+// そのカーネルを実行するスレッドが、 すべてのスレッドの中でどこに位置するか(x,y,z)」を示しています
+void CSMain (uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+	// TODO: insert actual code here!
+    float width, height;
+    texture_buffer.GetDimensions(width, height);
+
+    float color = 1.0f;
+    if (dispatch_thread_id.x >= dispatch_thread_id.y - 10
+        && dispatch_thread_id.x <= dispatch_thread_id.y + 10)
+    {
+        color = 0.0f;
+    }
+    
+    dispatch_thread_id.y = 512 - dispatch_thread_id.y;
+    texture_buffer[dispatch_thread_id.xy] = float4(color, color, color, 1);
+
+    //texture_buffer[id.xy] = float4(id.x & id.y, (id.x & 15)/15.0, (id.y & 15)/15.0, 0.0);
+}
