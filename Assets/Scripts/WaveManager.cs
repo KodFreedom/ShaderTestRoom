@@ -85,7 +85,7 @@ public class WaveManager : MonoBehaviour
         }
 
         // wave更新
-        water_.UpdateWave();
+        water_.UpdateWave(wave_objects_[0].transform.position);
 
         // object height更新
         for (int i = 0; i < wave_objects_.Length; ++i)

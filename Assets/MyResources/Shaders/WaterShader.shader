@@ -56,12 +56,11 @@
 
             VertexOut vert(VertexIn v)
             {
-                static float offset_mul = 101.0f / 128.0f;
-                static float offset_add = (128.0f - 101.0f) * 0.5f / 128.0f;
+                //static float offset_mul = 101.0f / 128.0f;
+                //static float offset_add = (128.0f - 101.0f) * 0.5f / 128.0f;
 
                 float2 real_uv = (1.0f - v.uv);// *offset_mul + offset_add;
-                // UNITY_SAMPLE_TEX2DARRAY_LOD
-                float4 bump_height = UNITY_SAMPLE_TEX2DARRAY(_BumpHeightMaps, float3(real_uv, _TextureZ));
+                float4 bump_height = UNITY_SAMPLE_TEX2DARRAY_LOD(_BumpHeightMaps, float3(real_uv, _TextureZ), 0);
                 bump_height = (bump_height - 0.5f) * 2.0f;
 
                 VertexOut o;

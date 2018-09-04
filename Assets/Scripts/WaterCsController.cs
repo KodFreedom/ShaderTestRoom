@@ -206,8 +206,8 @@ public class WaterCsController : MonoBehaviour
         
         uint thread_size_x, thread_size_y, thread_size_z;
         compute_shader_.GetKernelThreadGroupSizes(update_wave_kernel_, out thread_size_x, out thread_size_y, out thread_size_z);
-        group_size_x_ = kVertexNumber / (int)thread_size_x;
-        group_size_y_ = kVertexNumber / (int)thread_size_y;
+        group_size_x_ = kVertexNumber * kWaterBlockNumber / (int)thread_size_x;
+        group_size_y_ = kVertexNumber * kWaterBlockNumber / (int)thread_size_y;
     }
 
     // 波の初期化
@@ -216,8 +216,8 @@ public class WaterCsController : MonoBehaviour
         uint thread_size_x, thread_size_y, thread_size_z;
         int kernel_index = compute_shader_.FindKernel("CSInitWave");
         compute_shader_.GetKernelThreadGroupSizes(kernel_index, out thread_size_x, out thread_size_y, out thread_size_z);
-        int group_size_x = kVertexNumber / (int)thread_size_x;
-        int group_size_y = kVertexNumber / (int)thread_size_y;
+        int group_size_x = kVertexNumber * kWaterBlockNumber / (int)thread_size_x;
+        int group_size_y = kVertexNumber * kWaterBlockNumber / (int)thread_size_y;
         
         int previous = (current_buffer_count_ + 2) % 3;
         int next = (current_buffer_count_ + 1) % 3;
