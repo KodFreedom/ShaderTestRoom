@@ -4,93 +4,97 @@
 #pragma kernel CSUpdateHeight
 #pragma kernel CSUpdatePolygonNormal
 #pragma kernel CSUpdateVertexNormal
+#pragma kernel CSResetBlock
 
-// Create a RenderTexture with enableRandomWrite flag and set it
-// with cs.SetTexture
-RWTexture2D<float4> bump_height_map;
-RWStructuredBuffer<float> previous_buffer;
-RWStructuredBuffer<float> current_buffer;
-RWStructuredBuffer<float> next_buffer;
-RWStructuredBuffer<float2> vertex_buffer;
-RWStructuredBuffer<float3> normal_buffer;
-int2 vertex_number;
+#define ThreadNumber 8
+#define BlockNumber 9
+
+RWTexture2DArray<float4> bump_height_maps;
+RWStructuredBuffer<float> previous_height_buffer;
+RWStructuredBuffer<float> current_height_buffer;
+RWStructuredBuffer<float> next_height_buffer;
+RWStructuredBuffer<float2> position_buffer;
+RWStructuredBuffer<float3> polygon_normal_buffer;
+StructuredBuffer<int> block_indeces;
+int3 reset_block_indeces;
+int vertex_number;
 int2 wave_position;
 float wave_value;
 float cth;
 
-[numthreads(8, 8, 1)]
+[numthreads(ThreadNumber, ThreadNumber, 1)]
 void CSInitWave(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     int index = dispatch_thread_id.y * vertex_number.x + dispatch_thread_id.x;
-    previous_buffer[index] = 0;
-    current_buffer[index] = 0;
-    next_buffer[index] = 0;
-    int half_x = (int)(vertex_number.x * 0.5f);
-    int half_y = (int)(vertex_number.y * 0.5f);
-    vertex_buffer[index] = float2((float)((int)dispatch_thread_id.x - half_x) / half_x * 1.0f,
-        (float)(half_y - (int)dispatch_thread_id.y) / half_y * 1.0f);
+    previous_height_buffer[index] = 0;
+    current_height_buffer[index] = 0;
+    next_height_buffer[index] = 0;
+
+    int half_size = (int)(vertex_number * 0.5f);
+    position_buffer[index] = float2((float)((int)dispatch_thread_id.x - half_size) / half_size * 1.0f,
+        (float)(half_size - (int)dispatch_thread_id.y) / half_size * 1.0f);
 }
 
 [numthreads(1, 1, 1)]
 void CSStartWave(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     int index = wave_position.y * vertex_number.x + wave_position.x;
-    current_buffer[index] = wave_value;
-    //current_buffer[index + 1] = -0.35f;
-    //current_buffer[index + vertex_number.x] = -0.4f;
-    //current_buffer[index + vertex_number.x + 1] = -0.4f;
+    current_height_buffer[index] = wave_value;
+    //current_height_buffer[index + 1] = -0.35f;
+    //current_height_buffer[index + vertex_number.x] = -0.4f;
+    //current_height_buffer[index + vertex_number.x + 1] = -0.4f;
 }
 
-[numthreads(8, 8, 1)]
+[numthreads(ThreadNumber, ThreadNumber, 1)]
 void CSUpdateHeight(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     int index = dispatch_thread_id.y * vertex_number.x + dispatch_thread_id.x;
 
     // 波の高さを更新
-    float right_height = current_buffer[index + 1];
-    float left_height = current_buffer[index - 1];
-    float up_height = current_buffer[index + vertex_number.x];
-    float down_height = current_buffer[index - vertex_number.x];
-    float current_height = current_buffer[index];
-    float previous_height = previous_buffer[index];
+    float right_height = current_height_buffer[index + 1];
+    float left_height = current_height_buffer[index - 1];
+    float up_height = current_height_buffer[index + vertex_number.x];
+    float down_height = current_height_buffer[index - vertex_number.x];
+    float current_height = current_height_buffer[index];
+    float previous_height = previous_height_buffer[index];
 
     float next_height = cth * (right_height + left_height + up_height + down_height)
         + (2.0f - 4.0f * cth) * current_height - previous_height;
 
     // 減衰を加える
     next_height -= 0.005f * (current_height - previous_height);
-    next_buffer[index] = next_height;
+    next_height_buffer[index] = next_height;
 }
 
-[numthreads(8, 8, 1)]
+[numthreads(ThreadNumber, ThreadNumber, 1)]
 void CSUpdatePolygonNormal(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     int index = dispatch_thread_id.y * vertex_number.x + dispatch_thread_id.x;
     int normal_index = dispatch_thread_id.y * vertex_number.x * 2 + dispatch_thread_id.x * 2;
     float3 p0 = float3(
-        vertex_buffer[index].x,
-        current_buffer[index],
-        vertex_buffer[index].y);
+        position_buffer[index].x,
+        current_height_buffer[index],
+        position_buffer[index].y);
     float3 p1 = float3(
-        vertex_buffer[index + vertex_number.x].x,
-        current_buffer[index + vertex_number.x],
-        vertex_buffer[index + vertex_number.x].y);
+        position_buffer[index + vertex_number.x].x,
+        current_height_buffer[index + vertex_number.x],
+        position_buffer[index + vertex_number.x].y);
     float3 p2 = float3(
-        vertex_buffer[index + vertex_number.x + 1].x,
-        current_buffer[index + vertex_number.x + 1],
-        vertex_buffer[index + vertex_number.x + 1].y);
-    normal_buffer[normal_index] = normalize(cross(p2 - p0, p1 - p0));
+        position_buffer[index + vertex_number.x + 1].x,
+        current_height_buffer[index + vertex_number.x + 1],
+        position_buffer[index + vertex_number.x + 1].y);
+    polygon_normal_buffer[normal_index] = normalize(cross(p2 - p0, p1 - p0));
 
     float3 q0 = p0;
     float3 q1 = float3(
-        vertex_buffer[index + 1].x,
-        current_buffer[index + 1],
-        vertex_buffer[index + 1].y);
+        position_buffer[index + 1].x,
+        current_height_buffer[index + 1],
+        position_buffer[index + 1].y);
     float3 q2 = p2;
-    normal_buffer[normal_index + 1] = normalize(cross(q1 - q0, q2 - q0));
+    polygon_normal_buffer[normal_index + 1] = normalize(cross(q1 - q0, q2 - q0));
 }
 
-[numthreads(8, 8, 1)]
+[numthreads(ThreadNumber, ThreadNumber, 1)]
 void CSUpdateVertexNormal(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     int index = dispatch_thread_id.y * vertex_number.x + dispatch_thread_id.x;
@@ -101,10 +105,15 @@ void CSUpdateVertexNormal(uint3 dispatch_thread_id : SV_DispatchThreadID)
     int index4 = (dispatch_thread_id.y - 1) * vertex_number.x * 2 + dispatch_thread_id.x * 2 + 1;
     int index5 = (dispatch_thread_id.y - 1) * vertex_number.x * 2 + dispatch_thread_id.x * 2 + 2;
     float3 normal = normalize(
-        normal_buffer[index0] + normal_buffer[index1] + normal_buffer[index2] + 
-        normal_buffer[index3] + normal_buffer[index4] + normal_buffer[index5]);
+        polygon_normal_buffer[index0] + polygon_normal_buffer[index1] + polygon_normal_buffer[index2] + 
+        polygon_normal_buffer[index3] + polygon_normal_buffer[index4] + polygon_normal_buffer[index5]);
 
     // yは1 -> 0に変化していくので逆転する必要があります
     dispatch_thread_id.y = vertex_number.y - dispatch_thread_id.y;
-    bump_height_map[dispatch_thread_id.xy] = float4(normal, current_buffer[index]) * 0.5f + 0.5f;
+    bump_height_map[dispatch_thread_id.xy] = float4(normal, current_height_buffer[index]) * 0.5f + 0.5f;
+}
+
+[numthreads(ThreadNumber, ThreadNumber, 1)]
+void CSResetBlock(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
 }

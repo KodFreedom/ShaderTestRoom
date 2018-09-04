@@ -6,7 +6,7 @@
     Properties
     {
         _Color("Color", Color) = (1,1,1,1)
-        _BumpHeightMap("BumpHeightMap", 2D) = "" {}
+        _BumpHeightMaps("BumpHeightMaps", 2DArray) = "" {}
         _RefractiveRatio("RefractiveRatio", Range(0.0,1.0)) = 0.25
     }
         //
@@ -35,7 +35,8 @@
 
             float4    _Color;
             float     _RefractiveRatio;
-            sampler2D _BumpHeightMap;
+            int       _TextureZ;
+            UNITY_DECLARE_TEX2DARRAY(_BumpHeightMaps);
 
             //////////////////////////////////////
             // Vertex Shader
@@ -59,7 +60,8 @@
                 static float offset_add = (128.0f - 101.0f) * 0.5f / 128.0f;
 
                 float2 real_uv = (1.0f - v.uv);// *offset_mul + offset_add;
-                float4 bump_height = tex2Dlod(_BumpHeightMap, float4(real_uv, 0, 0));
+                // UNITY_SAMPLE_TEX2DARRAY_LOD
+                float4 bump_height = UNITY_SAMPLE_TEX2DARRAY(_BumpHeightMaps, float3(real_uv, _TextureZ));
                 bump_height = (bump_height - 0.5f) * 2.0f;
 
                 VertexOut o;
