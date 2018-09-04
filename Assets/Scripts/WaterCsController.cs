@@ -12,14 +12,16 @@ public class WaterCsController : MonoBehaviour
     }
 
     // 定数
-    private static readonly int kWaterBlockNumber = 9;
-    private static readonly int kVertexNumber = 128;
+    private static readonly int kWaterBlockNumberSide = 3;
+    private static readonly int kVertexNumberSide = 128;
+    private static readonly int kTotalWaterBlockNumber = kWaterBlockNumberSide * kWaterBlockNumberSide;
+    private static readonly int kTotalVertexNumber = kVertexNumberSide * kVertexNumberSide;
     private static readonly float kWaveHeightMultiplyer = 1.5f;
 
     // 変数
     [SerializeField] ComputeShader compute_shader_;
     [SerializeField, Range(0f, 100f)] float wave_speed_ = 5f;
-    private int[] block_indeces_ = new int[kWaterBlockNumber];
+    private int[] block_indeces_ = new int[kTotalWaterBlockNumber];
     private int occur_wave_kernel_;
     private int update_wave_kernel_;
     private int update_polygon_normal_kernel_;
@@ -27,8 +29,8 @@ public class WaterCsController : MonoBehaviour
     private int block_reset_kernel_;
     private int group_size_x_, group_size_y_;
     private int current_buffer_count_ = 0;
-    private float[] current_heights_ = new float[kVertexNumber * kVertexNumber * kWaterBlockNumber];
-    private Block[] blocks_ = new Block[kWaterBlockNumber];
+    private float[] current_heights_ = new float[kTotalVertexNumber * kTotalWaterBlockNumber];
+    private Block[] blocks_ = new Block[kTotalWaterBlockNumber];
     private RenderTexture render_texture_;
     private ComputeBuffer[] height_buffers_ = new ComputeBuffer[3]; // 前フレーム、今フレーム、次フレーム高さ
     private ComputeBuffer position_buffer_; // 頂点位置xy 
@@ -37,45 +39,50 @@ public class WaterCsController : MonoBehaviour
 
     public void OccurWave(Transform test_object, Vector3 direction)
     {
-        //Vector3 object_position = test_object.position;
-        //Vector2 half_size = new Vector2(transform.localScale.x, transform.localScale.z) * 0.5f;
-        //if (object_position.x <= -half_size.x || object_position.x >= half_size.x
-        //    || object_position.z <= -half_size.y || object_position.z >= half_size.y)
-        //{
-        //    return;
-        //}
+        Vector3 object_position = test_object.position;
+        int center = block_indeces_[4];
+        var center_position = blocks_[center].transform.position;
+        object_position = object_position - center_position;
+        float half_size = transform.localScale.x * 0.5f;
 
-        //int[] wave_position = new int[2];
-        //wave_position[0] = (int)((object_position.x + half_size.x) / (half_size.x * 2f) * kVertexNumber - direction.x);
-        //wave_position[1] = (int)((-object_position.z + half_size.y) / (half_size.y * 2f) * kVertexNumber + direction.z);
+        if (object_position.x <= -half_size || object_position.x >= half_size
+            || object_position.z <= -half_size || object_position.z >= half_size)
+        {
+            // TODO : 敵なら消滅する
+            return;
+        }
 
-        //// 高さを判定する
-        //float obj_height = object_position.y - test_object.localScale.y * 0.5f;
-        //float wave_height = current_heights_[wave_position[1] * kVertexNumber + wave_position[0]] * kWaveHeightMultiplyer;
-        //if (obj_height > wave_height)
-        //{
-        //    return;
-        //}
+        int[] wave_position = new int[2];
+        wave_position[0] = (center % 3) * kVertexNumberSide + (int)((object_position.x + half_size) / (half_size * 2f) * kVertexNumberSide - direction.x);
+        wave_position[1] = (center / 3) * kVertexNumberSide + (int)((-object_position.z + half_size) / (half_size * 2f) * kVertexNumberSide + direction.z);
 
-        //compute_shader_.SetBuffer(occur_wave_kernel_, "current_buffer", height_buffers_[current_buffer_count_]);
-        //compute_shader_.SetInts("wave_position", wave_position);
-        //compute_shader_.SetFloat("wave_value", (obj_height + test_object.localScale.y * 0.25f) / kWaveHeightMultiplyer);
-        //compute_shader_.Dispatch(occur_wave_kernel_, 1, 1, 1);
+        // 高さを判定する
+        float obj_height = object_position.y - test_object.localScale.y * 0.5f;
+        float wave_height = current_heights_[wave_position[1] * kVertexNumberSide + wave_position[0]] * kWaveHeightMultiplyer;
+        if (obj_height > wave_height)
+        {
+            return;
+        }
+
+        compute_shader_.SetBuffer(occur_wave_kernel_, "current_height_buffer", height_buffers_[current_buffer_count_]);
+        compute_shader_.SetInts("wave_position", wave_position);
+        compute_shader_.SetFloat("wave_value", (obj_height + test_object.localScale.y * 0.25f) / kWaveHeightMultiplyer);
+        compute_shader_.Dispatch(occur_wave_kernel_, 1, 1, 1);
     }
 
     public float ReturnHeight(Vector3 object_position)
     {
         return 0f;
         //Vector2 half_size = new Vector2(transform.localScale.x, transform.localScale.z) * 0.5f;
-        //if (object_position.x <= -half_size.x || object_position.x >= half_size.x
-        //    || object_position.z <= -half_size.y || object_position.z >= half_size.y)
+        //if (object_position.x <= -half_size || object_position.x >= half_size
+        //    || object_position.z <= -half_size || object_position.z >= half_size)
         //{
         //    return 0f;
         //}
 
         //int[] wave_position = new int[2];
-        //wave_position[0] = (int)((object_position.x + half_size.x) / (half_size.x * 2f) * kVertexNumber);
-        //wave_position[1] = (int)((-object_position.z + half_size.y) / (half_size.y * 2f) * kVertexNumber);
+        //wave_position[0] = (int)((object_position.x + half_size) / (half_size * 2f) * kVertexNumber);
+        //wave_position[1] = (int)((-object_position.z + half_size) / (half_size * 2f) * kVertexNumber);
         //return current_heights_[wave_position[1] * kVertexNumber + wave_position[0]] * kWaveHeightMultiplyer;
     }
 
@@ -110,11 +117,11 @@ public class WaterCsController : MonoBehaviour
         current_buffer_count_ = next;
 
         // 面法線更新
-        compute_shader_.SetBuffer(update_wave_kernel_, "current_height_buffer", height_buffers_[current_buffer_count_]);
+        compute_shader_.SetBuffer(update_polygon_normal_kernel_, "current_height_buffer", height_buffers_[current_buffer_count_]);
         compute_shader_.Dispatch(update_polygon_normal_kernel_, group_size_x_, group_size_y_, 1);
 
         // 頂点法線更新
-        compute_shader_.SetBuffer(update_wave_kernel_, "current_height_buffer", height_buffers_[current_buffer_count_]);
+        compute_shader_.SetBuffer(update_vertex_normal_kernel_, "current_height_buffer", height_buffers_[current_buffer_count_]);
         compute_shader_.Dispatch(update_vertex_normal_kernel_, group_size_x_, group_size_y_, 1);
 
         // 今の頂点高さを取得
@@ -148,26 +155,26 @@ public class WaterCsController : MonoBehaviour
     // バッファの初期化
     private void InitBuffer()
     {
-        render_texture_ = new RenderTexture(kVertexNumber, kVertexNumber, 0, RenderTextureFormat.ARGB32);
+        render_texture_ = new RenderTexture(kVertexNumberSide, kVertexNumberSide, 0, RenderTextureFormat.ARGB32);
         render_texture_.dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray;
-        render_texture_.volumeDepth = kWaterBlockNumber;
+        render_texture_.volumeDepth = kTotalWaterBlockNumber;
         render_texture_.wrapMode = TextureWrapMode.Clamp;
         render_texture_.enableRandomWrite = true;
         render_texture_.Create();
 
-        position_buffer_ = new ComputeBuffer(kVertexNumber * kVertexNumber * kWaterBlockNumber, sizeof(float) * 2);
-        polygon_normal_buffer_ = new ComputeBuffer(kVertexNumber * kVertexNumber * kWaterBlockNumber * 2, sizeof(float) * 3);
+        position_buffer_ = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber, sizeof(float) * 2);
+        polygon_normal_buffer_ = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber * 2, sizeof(float) * 3);
         for (int i = 0; i < 3; ++i)
         {
-            height_buffers_[i] = new ComputeBuffer(kVertexNumber * kVertexNumber * kWaterBlockNumber, sizeof(float)); ;
+            height_buffers_[i] = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber, sizeof(float)); ;
         }
-        block_indeces_buffer_ = new ComputeBuffer(kWaterBlockNumber, sizeof(int));
+        block_indeces_buffer_ = new ComputeBuffer(kTotalWaterBlockNumber, sizeof(int));
     }
 
     // ブロックの初期化
     private void InitBlocks()
     {
-        for(int i = 0; i < kWaterBlockNumber; ++i)
+        for(int i = 0; i < kTotalWaterBlockNumber; ++i)
         {
             block_indeces_[i] = i;
             blocks_[i].transform = transform.Find("WaterBlock" + i);
@@ -206,8 +213,8 @@ public class WaterCsController : MonoBehaviour
         
         uint thread_size_x, thread_size_y, thread_size_z;
         compute_shader_.GetKernelThreadGroupSizes(update_wave_kernel_, out thread_size_x, out thread_size_y, out thread_size_z);
-        group_size_x_ = kVertexNumber * kWaterBlockNumber / (int)thread_size_x;
-        group_size_y_ = kVertexNumber * kWaterBlockNumber / (int)thread_size_y;
+        group_size_x_ = kVertexNumberSide * kWaterBlockNumberSide / (int)thread_size_x;
+        group_size_y_ = kVertexNumberSide * kWaterBlockNumberSide / (int)thread_size_y;
     }
 
     // 波の初期化
@@ -216,15 +223,13 @@ public class WaterCsController : MonoBehaviour
         uint thread_size_x, thread_size_y, thread_size_z;
         int kernel_index = compute_shader_.FindKernel("CSInitWave");
         compute_shader_.GetKernelThreadGroupSizes(kernel_index, out thread_size_x, out thread_size_y, out thread_size_z);
-        int group_size_x = kVertexNumber * kWaterBlockNumber / (int)thread_size_x;
-        int group_size_y = kVertexNumber * kWaterBlockNumber / (int)thread_size_y;
+        int group_size_x = kVertexNumberSide * kWaterBlockNumberSide / (int)thread_size_x;
+        int group_size_y = kVertexNumberSide * kWaterBlockNumberSide / (int)thread_size_y;
         
-        int previous = (current_buffer_count_ + 2) % 3;
-        int next = (current_buffer_count_ + 1) % 3;
-        compute_shader_.SetInt("vertex_number", kVertexNumber);
-        compute_shader_.SetBuffer(kernel_index, "previous_height_buffer", height_buffers_[previous]);
-        compute_shader_.SetBuffer(kernel_index, "current_height_buffer", height_buffers_[current_buffer_count_]);
-        compute_shader_.SetBuffer(kernel_index, "next_buffer", height_buffers_[next]);
+        compute_shader_.SetInt("vertex_number_per_block", kVertexNumberSide);
+        compute_shader_.SetBuffer(kernel_index, "previous_height_buffer", height_buffers_[0]);
+        compute_shader_.SetBuffer(kernel_index, "current_height_buffer", height_buffers_[1]);
+        compute_shader_.SetBuffer(kernel_index, "next_height_buffer", height_buffers_[2]);
         compute_shader_.SetBuffer(kernel_index, "position_buffer", position_buffer_);
 
         compute_shader_.Dispatch(kernel_index, group_size_x, group_size_y, 1);
@@ -238,7 +243,7 @@ public class WaterCsController : MonoBehaviour
         // 3 4 5
         // 6 7 8
         int center = block_indeces_[4];
-        var center_position = blocks_[center].transform.position * transform.localScale.x;
+        var center_position = blocks_[center].transform.position;
         var real_player_position = player_position - center_position;
         float half_size = transform.localScale.x * 0.5f;
 
@@ -247,25 +252,21 @@ public class WaterCsController : MonoBehaviour
         {// 左、258を初期化して左列に移す
             ResetBlocks(block_indeces_[2], block_indeces_[5], block_indeces_[8], Vector3.left * 3f);
             ShiftBlockX(2);
-            ResetTextureOffset();
         }
         else if (real_player_position.x > half_size)
         {// 右、036を初期化して右列に移す
             ResetBlocks(block_indeces_[0], block_indeces_[3], block_indeces_[6], Vector3.right * 3f);
             ShiftBlockX(1);
-            ResetTextureOffset();
         }
         else if (real_player_position.z < -half_size)
         {// 下、012を初期化して下行に移す
-            ResetBlocks(block_indeces_[0], block_indeces_[1], block_indeces_[2], Vector3.down * 3f);
-            ShiftBlockY(2);
-            ResetTextureOffset();
+            ResetBlocks(block_indeces_[0], block_indeces_[1], block_indeces_[2], Vector3.back * 3f);
+            ShiftBlockY(1);
         }
         else if (real_player_position.z > half_size)
         {// 上、678を初期化して上行に移す
-            ResetBlocks(block_indeces_[6], block_indeces_[7], block_indeces_[8], Vector3.up * 3f);
-            ShiftBlockY(1);
-            ResetTextureOffset();
+            ResetBlocks(block_indeces_[6], block_indeces_[7], block_indeces_[8], Vector3.forward * 3f);
+            ShiftBlockY(2);
         }
     }
 
@@ -279,7 +280,7 @@ public class WaterCsController : MonoBehaviour
 
         for(int i = 0; i < 3; ++i)
         {
-            blocks_[indeces[i]].transform.position += offset;
+            blocks_[indeces[i]].transform.localPosition += offset;
         }
 
         compute_shader_.SetInts("reset_block_indeces", indeces);
@@ -289,7 +290,8 @@ public class WaterCsController : MonoBehaviour
     // 列ごとシフトする
     private void ShiftBlockX(int shift_value)
     {
-        var copy = block_indeces_;
+        int[] copy = new int[kTotalWaterBlockNumber];
+        block_indeces_.CopyTo(copy, 0);
         for (int i = 0; i < 3; ++i)
         {
             block_indeces_[i + 0] = copy[(i + shift_value) % 3 + 0];
@@ -301,21 +303,13 @@ public class WaterCsController : MonoBehaviour
     // 行ごとシフトする
     private void ShiftBlockY(int shift_value)
     {
-        var copy = block_indeces_;
+        int[] copy = new int[kTotalWaterBlockNumber];
+        block_indeces_.CopyTo(copy, 0);
         for (int i = 0; i < 3; ++i)
         {
             block_indeces_[i * 3 + 0] = copy[(i + shift_value) % 3 * 3 + 0];
             block_indeces_[i * 3 + 1] = copy[(i + shift_value) % 3 * 3 + 1];
             block_indeces_[i * 3 + 2] = copy[(i + shift_value) % 3 * 3 + 2];
-        }
-    }
-
-    // Shaderのtex2darrayのindexのリセット
-    private void ResetTextureOffset()
-    {
-        for (int i = 0; i < kWaterBlockNumber; ++i)
-        {
-            blocks_[i].material.SetInt("_TextureZ", block_indeces_[i]);
         }
     }
 }

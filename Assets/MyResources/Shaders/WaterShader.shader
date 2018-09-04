@@ -8,6 +8,7 @@
         _Color("Color", Color) = (1,1,1,1)
         _BumpHeightMaps("BumpHeightMaps", 2DArray) = "" {}
         _RefractiveRatio("RefractiveRatio", Range(0.0,1.0)) = 0.25
+        _TextureZ("TextureZ", int) = 0
     }
         //
         //////////////////////////////////////
@@ -52,18 +53,20 @@
                 float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
                 float3 world_vertex : TEXCOORD1;
+                float height : TEXCOORD2;
             };
 
             VertexOut vert(VertexIn v)
             {
+                VertexOut o;
                 //static float offset_mul = 101.0f / 128.0f;
                 //static float offset_add = (128.0f - 101.0f) * 0.5f / 128.0f;
 
                 float2 real_uv = (1.0f - v.uv);// *offset_mul + offset_add;
                 float4 bump_height = UNITY_SAMPLE_TEX2DARRAY_LOD(_BumpHeightMaps, float3(real_uv, _TextureZ), 0);
+                o.height = bump_height.w;
                 bump_height = (bump_height - 0.5f) * 2.0f;
 
-                VertexOut o;
                 v.vertex.y += bump_height.w * 1.5f;
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.world_vertex = mul(unity_ObjectToWorld, v.vertex).xyz;
@@ -74,7 +77,7 @@
 
             fixed4 frag(VertexOut info) : SV_Target
             {
-                float light_intensity = dot(info.normal, _WorldSpaceLightPos0.xyz);
+                float light_intensity = info.height;//dot(info.normal, _WorldSpaceLightPos0.xyz);
                 float3 diffuse = _Color.rgb * max(0.0f, light_intensity);
 
                 // フレネル反射率計算
