@@ -20,20 +20,18 @@ public class WaterCsController : MonoBehaviour
 
     // 変数
     [SerializeField] ComputeShader compute_shader_;
-    [SerializeField, Range(0f, 100f)] float wave_speed_ = 5f;
+    //[SerializeField, Range(0f, 100f)] float wave_speed_ = 5f;
     private int[] block_indeces_ = new int[kTotalWaterBlockNumber];
     private int occur_wave_kernel_;
     private int update_wave_kernel_;
     private int update_polygon_normal_kernel_;
     private int update_vertex_normal_kernel_;
-    private int block_reset_kernel_;
     private int group_size_x_, group_size_y_;
     private int current_buffer_count_ = 0;
     private float[] current_heights_ = new float[kTotalVertexNumber * kTotalWaterBlockNumber];
     private Block[] blocks_ = new Block[kTotalWaterBlockNumber];
     private RenderTexture render_texture_;
     private ComputeBuffer[] height_buffers_ = new ComputeBuffer[3]; // 前フレーム、今フレーム、次フレーム高さ
-    private ComputeBuffer position_buffer_; // 頂点位置xy 
     private ComputeBuffer polygon_normal_buffer_; // 面法線
     private ComputeBuffer block_indeces_buffer_;
 
@@ -102,9 +100,13 @@ public class WaterCsController : MonoBehaviour
         int next = (current_buffer_count_ + 1) % 3;
 
         // 波の速度、時間の刻み、グリッド幅
+        //float h = 1.0f;
+        //float cth = (wave_speed_ * wave_speed_ * Time.deltaTime * Time.deltaTime) / (h * h);
+        //cth = Mathf.Clamp(cth, 0f, 0.5f);
+        float c = 0.4f;
+        float dt = 0.4f;
         float h = 1.0f;
-        float cth = (wave_speed_ * wave_speed_ * Time.deltaTime * Time.deltaTime) / (h * h);
-        cth = Mathf.Clamp(cth, 0f, 0.5f);
+        float cth = (c * c * dt * dt) / (h * h);
         compute_shader_.SetFloat("cth", cth);
 
         // 波の更新
@@ -143,7 +145,6 @@ public class WaterCsController : MonoBehaviour
     private void OnDestroy()
     {
         render_texture_.Release();
-        position_buffer_.Release();
         polygon_normal_buffer_.Release();
         for(int i = 0; i < 3; ++i)
         {
@@ -162,11 +163,10 @@ public class WaterCsController : MonoBehaviour
         render_texture_.enableRandomWrite = true;
         render_texture_.Create();
 
-        position_buffer_ = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber, sizeof(float) * 2);
         polygon_normal_buffer_ = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber * 2, sizeof(float) * 3);
         for (int i = 0; i < 3; ++i)
         {
-            height_buffers_[i] = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber, sizeof(float)); ;
+            height_buffers_[i] = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber, sizeof(float));
         }
         block_indeces_buffer_ = new ComputeBuffer(kTotalWaterBlockNumber, sizeof(int));
     }
@@ -190,20 +190,12 @@ public class WaterCsController : MonoBehaviour
         occur_wave_kernel_ = compute_shader_.FindKernel("CSStartWave");
         compute_shader_.SetBuffer(occur_wave_kernel_, "block_indeces", block_indeces_buffer_);
 
-        block_reset_kernel_ = compute_shader_.FindKernel("CSResetBlock");
-        compute_shader_.SetBuffer(block_reset_kernel_, "block_indeces", block_indeces_buffer_);
-        compute_shader_.SetBuffer(block_reset_kernel_, "previous_height_buffer", height_buffers_[0]);
-        compute_shader_.SetBuffer(block_reset_kernel_, "current_height_buffer", height_buffers_[1]);
-        compute_shader_.SetBuffer(block_reset_kernel_, "next_height_buffer", height_buffers_[2]);
-
         update_wave_kernel_ = compute_shader_.FindKernel("CSUpdateHeight");
         compute_shader_.SetBuffer(update_wave_kernel_, "block_indeces", block_indeces_buffer_);
-        compute_shader_.SetBuffer(update_wave_kernel_, "position_buffer", position_buffer_);
         compute_shader_.SetBuffer(update_wave_kernel_, "polygon_normal_buffer", polygon_normal_buffer_);
 
         update_polygon_normal_kernel_ = compute_shader_.FindKernel("CSUpdatePolygonNormal");
         compute_shader_.SetBuffer(update_polygon_normal_kernel_, "block_indeces", block_indeces_buffer_);
-        compute_shader_.SetBuffer(update_polygon_normal_kernel_, "position_buffer", position_buffer_);
         compute_shader_.SetBuffer(update_polygon_normal_kernel_, "polygon_normal_buffer", polygon_normal_buffer_);
 
         update_vertex_normal_kernel_ = compute_shader_.FindKernel("CSUpdateVertexNormal");
@@ -215,6 +207,8 @@ public class WaterCsController : MonoBehaviour
         compute_shader_.GetKernelThreadGroupSizes(update_wave_kernel_, out thread_size_x, out thread_size_y, out thread_size_z);
         group_size_x_ = kVertexNumberSide * kWaterBlockNumberSide / (int)thread_size_x;
         group_size_y_ = kVertexNumberSide * kWaterBlockNumberSide / (int)thread_size_y;
+        Debug.Log("group size x : " + group_size_x_);
+        Debug.Log("group size y : " + group_size_y_);
     }
 
     // 波の初期化
@@ -230,7 +224,6 @@ public class WaterCsController : MonoBehaviour
         compute_shader_.SetBuffer(kernel_index, "previous_height_buffer", height_buffers_[0]);
         compute_shader_.SetBuffer(kernel_index, "current_height_buffer", height_buffers_[1]);
         compute_shader_.SetBuffer(kernel_index, "next_height_buffer", height_buffers_[2]);
-        compute_shader_.SetBuffer(kernel_index, "position_buffer", position_buffer_);
 
         compute_shader_.Dispatch(kernel_index, group_size_x, group_size_y, 1);
     }
@@ -270,7 +263,7 @@ public class WaterCsController : MonoBehaviour
         }
     }
 
-    // ブロックの高さを0にリセットし、位置をずらす
+    // ブロックの位置をずらす
     private void ResetBlocks(int index0, int index1, int index2, Vector3 offset)
     {
         int[] indeces = new int[3];
@@ -282,9 +275,6 @@ public class WaterCsController : MonoBehaviour
         {
             blocks_[indeces[i]].transform.localPosition += offset;
         }
-
-        compute_shader_.SetInts("reset_block_indeces", indeces);
-        compute_shader_.Dispatch(block_reset_kernel_, group_size_x_, group_size_y_, 1);
     }
 
     // 列ごとシフトする

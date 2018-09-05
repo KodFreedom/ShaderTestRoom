@@ -77,7 +77,7 @@
 
             fixed4 frag(VertexOut info) : SV_Target
             {
-                float light_intensity = info.height;//dot(info.normal, _WorldSpaceLightPos0.xyz);
+                float light_intensity = dot(normalize(info.normal), _WorldSpaceLightPos0.xyz); //(info.height + 0.25f) * 2.0f;
                 float3 diffuse = _Color.rgb * max(0.0f, light_intensity);
 
                 // フレネル反射率計算
