@@ -28,31 +28,51 @@ public class WaterCsController : MonoBehaviour
     private int update_vertex_normal_kernel_;
     private int group_size_x_, group_size_y_;
     private int current_buffer_count_ = 0;
+    private int occur_position_count_ = 0;
     private float[] current_heights_ = new float[kTotalVertexNumber * kTotalWaterBlockNumber];
     private Block[] blocks_ = new Block[kTotalWaterBlockNumber];
+    private Vector3[] occur_positions_ = new Vector3[100];
     private RenderTexture render_texture_;
     private ComputeBuffer[] height_buffers_ = new ComputeBuffer[3]; // 前フレーム、今フレーム、次フレーム高さ
     private ComputeBuffer polygon_normal_buffer_; // 面法線
     private ComputeBuffer block_indeces_buffer_;
+    private ComputeBuffer occur_position_buffer_;
+    
 
     public void OccurWave(Transform test_object, Vector3 direction)
     {
         Vector3 object_position = test_object.position;
-        int center = block_indeces_[4];
-        var center_position = blocks_[center].transform.position;
+        int center = kWaterBlockNumberSide * kWaterBlockNumberSide / 2;
+        int real_center = block_indeces_[center];
+        var center_position = blocks_[real_center].transform.position;
         object_position = object_position - center_position;
-        float half_size = transform.localScale.x * 0.5f;
+        float half_size_block = transform.localScale.x * 0.5f;
+        float half_size_side = half_size_block * kWaterBlockNumberSide;
 
-        if (object_position.x <= -half_size || object_position.x >= half_size
-            || object_position.z <= -half_size || object_position.z >= half_size)
+        if (object_position.x <= -half_size_side || object_position.x >= half_size_side
+            || object_position.z <= -half_size_side || object_position.z >= half_size_side)
         {
-            // TODO : 敵なら消滅する
+            if(test_object.gameObject.tag.Equals("Enemy"))
+            {
+                Destroy(test_object.gameObject);
+            }
             return;
         }
 
         int[] wave_position = new int[2];
-        wave_position[0] = (center % 3) * kVertexNumberSide + (int)((object_position.x + half_size) / (half_size * 2f) * kVertexNumberSide - direction.x);
-        wave_position[1] = (center / 3) * kVertexNumberSide + (int)((-object_position.z + half_size) / (half_size * 2f) * kVertexNumberSide + direction.z);
+        wave_position[0] = (center % kWaterBlockNumberSide) * kVertexNumberSide + (int)((object_position.x + half_size_block) / (half_size_block * 2f) * kVertexNumberSide - direction.x);
+        wave_position[1] = (center / kWaterBlockNumberSide) * kVertexNumberSide + (int)((-object_position.z + half_size_block) / (half_size_block * 2f) * kVertexNumberSide + direction.z);
+        int index_x = wave_position[0] / kVertexNumberSide;
+        int index_y = wave_position[1] / kVertexNumberSide;
+        if(index_x < 0 || index_x >= kWaterBlockNumberSide
+            || index_y < 0 || index_y >= kWaterBlockNumberSide)
+        {
+            return;
+        }
+
+        int real_index = block_indeces_[index_y * kWaterBlockNumberSide + index_x];
+        wave_position[0] = (real_index % kWaterBlockNumberSide) * kVertexNumberSide + wave_position[0] % kVertexNumberSide;
+        wave_position[1] = (real_index / kWaterBlockNumberSide) * kVertexNumberSide + wave_position[1] % kVertexNumberSide;
 
         // 高さを判定する
         float obj_height = object_position.y - test_object.localScale.y * 0.5f;
@@ -62,10 +82,8 @@ public class WaterCsController : MonoBehaviour
             return;
         }
 
-        compute_shader_.SetBuffer(occur_wave_kernel_, "current_height_buffer", height_buffers_[current_buffer_count_]);
-        compute_shader_.SetInts("wave_position", wave_position);
-        compute_shader_.SetFloat("wave_value", (obj_height + test_object.localScale.y * 0.25f) / kWaveHeightMultiplyer);
-        compute_shader_.Dispatch(occur_wave_kernel_, 1, 1, 1);
+        occur_positions_[occur_position_count_] = new Vector3(wave_position[0], wave_position[1], (obj_height + test_object.localScale.y * 0.25f) / kWaveHeightMultiplyer);
+        ++occur_position_count_;
     }
 
     public float ReturnHeight(Vector3 object_position)
@@ -89,6 +107,15 @@ public class WaterCsController : MonoBehaviour
     /// </summary>
     public void UpdateWave(Vector3 player_position)
     {
+        // Waveの生成
+        if(occur_position_count_ > 0)
+        {
+            occur_position_buffer_.SetData(occur_positions_);
+            compute_shader_.SetBuffer(occur_wave_kernel_, "current_height_buffer", height_buffers_[current_buffer_count_]);
+            compute_shader_.Dispatch(occur_wave_kernel_, occur_position_count_, 1, 1);
+            occur_position_count_ = 0;
+        }
+
         // Blockの更新
         UpdateBlocks(player_position);
 
@@ -151,6 +178,7 @@ public class WaterCsController : MonoBehaviour
             height_buffers_[i].Release();
         }
         block_indeces_buffer_.Release();
+        occur_position_buffer_.Release();
     }
 
     // バッファの初期化
@@ -169,6 +197,7 @@ public class WaterCsController : MonoBehaviour
             height_buffers_[i] = new ComputeBuffer(kTotalVertexNumber * kTotalWaterBlockNumber, sizeof(float));
         }
         block_indeces_buffer_ = new ComputeBuffer(kTotalWaterBlockNumber, sizeof(int));
+        occur_position_buffer_ = new ComputeBuffer(100, sizeof(float) * 3);
     }
 
     // ブロックの初期化
@@ -188,7 +217,7 @@ public class WaterCsController : MonoBehaviour
     private void InitComputeShader()
     {
         occur_wave_kernel_ = compute_shader_.FindKernel("CSStartWave");
-        compute_shader_.SetBuffer(occur_wave_kernel_, "block_indeces", block_indeces_buffer_);
+        compute_shader_.SetBuffer(occur_wave_kernel_, "occur_position_buffer", occur_position_buffer_);
 
         update_wave_kernel_ = compute_shader_.FindKernel("CSUpdateHeight");
         compute_shader_.SetBuffer(update_wave_kernel_, "block_indeces", block_indeces_buffer_);

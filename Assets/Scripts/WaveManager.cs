@@ -10,9 +10,10 @@ public class WaveManager : MonoBehaviour
     private static WaveManager instance_ = null;
     public static WaveManager Instance { get { return instance_; } }
 
-    private static readonly int kMaxObjects = 10;
+    private static readonly int kMaxObjects = 64;
     private WaterCsController water_ = null;
     private WaveObjectController[] wave_objects_ = new WaveObjectController[kMaxObjects];
+    private int enemy_count_ = 0;
 
     public void Register(WaterCsController water)
     {
@@ -27,14 +28,32 @@ public class WaveManager : MonoBehaviour
         return water_;
     }
 
+    public WaveObjectController Player()
+    {
+        return wave_objects_[0];
+    }
+
+    public int EnemyCount()
+    {
+        return enemy_count_;
+    }
+
     public void Register(WaveObjectController obj)
     {
-        for(int i = 0; i < wave_objects_.Length; ++i)
+        if(obj.gameObject.tag.Equals("Player"))
         {
-            if(wave_objects_[i] == null)
+            wave_objects_[0] = obj;
+        }
+        else
+        {
+            for (int i = 1; i < wave_objects_.Length; ++i)
             {
-                wave_objects_[i] = obj;
-                break;
+                if (wave_objects_[i] == null)
+                {
+                    wave_objects_[i] = obj;
+                    ++enemy_count_;
+                    break;
+                }
             }
         }
     }
@@ -46,6 +65,7 @@ public class WaveManager : MonoBehaviour
             if (wave_objects_[i] == obj)
             {
                 wave_objects_[i] = null;
+                --enemy_count_;
                 break;
             }
         }

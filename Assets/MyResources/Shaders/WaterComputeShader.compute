@@ -14,10 +14,9 @@ RWStructuredBuffer<float> previous_height_buffer;
 RWStructuredBuffer<float> current_height_buffer;
 RWStructuredBuffer<float> next_height_buffer;
 RWStructuredBuffer<float3> polygon_normal_buffer;
+RWStructuredBuffer<float3> occur_position_buffer;
 StructuredBuffer<int> block_indeces;
 int vertex_number_per_block;
-int2 wave_position;
-float wave_value;
 float cth;
 
 [numthreads(ThreadNumber, ThreadNumber, 1)]
@@ -35,11 +34,12 @@ void CSInitWave(int3 vertex_id : SV_GroupID, // 0 - 127
 }
 
 [numthreads(1, 1, 1)]
-void CSStartWave()
+void CSStartWave(uint3 group_id : SV_GroupID)
 {
-    int index = wave_position.y * vertex_number_per_block * BlockNumberSide + wave_position.x;
-    current_height_buffer[index] = wave_value;
-    current_height_buffer[index + 1] = wave_value;
+    float3 data = occur_position_buffer[group_id.x];
+    int index = (int)data.y * vertex_number_per_block * BlockNumberSide + (int)data.x;
+    current_height_buffer[index] = data.z;
+    current_height_buffer[index + 1] = data.z;
     //current_height_buffer[index + vertex_number_per_block] = -0.4f;
     //current_height_buffer[index + vertex_number_per_block + 1] = -0.4f;
 }
